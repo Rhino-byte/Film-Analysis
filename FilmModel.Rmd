@@ -15,6 +15,8 @@ library(caTools)
 library(pander) #Table format
 library(performance)
 library(car) # check vif of the model
+library(lubridate)
+
 ```
 
 The dataset can be located from this github [repo](https://github.com/Rhino-byte/GroupWork/blob/main/Data/Merged_data.csv)
@@ -28,6 +30,11 @@ names(Merged_data)
 ```
 
 ## Data Cleaning/Preparation
+
+```{r}
+month(Merged_data$release_date)
+```
+
 
 ```{r}
 # Check for duplicates
@@ -63,7 +70,7 @@ Merged_data %>% filter(!worldwide_gross <= 0) -> Merged_data
 #
 Merged_data %>% select(runtime_minutes,vote_average,popularity
                     ,production_budget,domestic_gross,foreign_gross
-                    ,worldwide_gross)->Model_data
+                    ,worldwide_gross,release_date) %>% mutate(month_release =month(release_date)) %>% select(-release_date)->Model_data
 
 # Split the data for Train and test data
 Y = Model_data$worldwide_gross
@@ -83,10 +90,13 @@ model2 =glm(worldwide_gross~ domestic_gross + foreign_gross,family = Gamma(link 
 # Model 3
 model3 =glm(worldwide_gross~ production_budget,family = Gamma(link = "log"),data = train_data)
 
+# Model 4
+model4=glm(worldwide_gross~. -runtime_minutes,data = train_data)# using Gaussian model
+
 
 summary(train_data$production_budget)
 
-summary.glm(model3)
+summary.glm(model4)
 
 # Summary of the model
 #pander::pander(summary.glm(Fit_model))
@@ -182,3 +192,44 @@ check_autocorrelation(Fit_model)
 ```
 
 Autocorrelation is present Indicating there is correlation which is dependent on time. Implying that time influences  the worldwide_gross which based on the data we concluded that time influences the data in terms of genres and the release date
+
+### Predicting the best model on the test data
+```{r}
+names(test_data)
+test_data %>% select(-worldwide_gross)->test_data2
+# Use the predict.glm to predict on our unseen data
+predicted<-predict.glm(Fit_model,test_data2,type = "response")
+# Add to the test data to be used while comparing to the actual value
+test_data$Predicted = predicted
+
+```
+
+### Compare the model metrics performance
+```{r}
+RMSE<-function(actual_val,Pred_val){
+  return(sqrt((sum((actual_val-Pred_val)^2))/length(actual_val)))
+}
+RMSE(test_data$worldwide_gross,test_data$Predicted)
+
+test_data %>% select(worldwide_gross,Predicted) %>% mutate(diff =worldwide_gross-Predicted)
+```
+Very High MSE implying that our model does not predict well     
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
