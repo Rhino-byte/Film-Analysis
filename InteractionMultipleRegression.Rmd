@@ -1,0 +1,229 @@
+---
+title: "Interaction in Multiple "
+output: html_notebook
+---
+
+```{r message=FALSE, warning=FALSE}
+# Import the necessary libraries
+library(tidyverse)
+library(performance)
+library(asbio)
+```
+
+## Example with real data
+>
+Consider the data set below, which contains data about various body measurements,as well as body fat.
+
+The goal is to check whether the independent variables ;
+- Skinfold Thickness (ST)
+- Thigh Circumference (TC)
+- Midarm Circumference (MC) 
+
+To predict the independent variable Body Fat (BF), and if so, whether there is any evidence of interactions among these variables.
+
+
+```{r}
+# Enter the data:
+st<-c(19.5, 24.7, 30.7, 29.8, 19.1, 25.6, 31.4, 27.9, 22.1, 25.5, 31.1,30.4, 18.7, 19.7, 14.6, 29.5, 27.7, 30.2, 22.7, 25.2)
+
+tc<-c(43.1, 49.8, 51.9, 54.3, 42.2, 53.9, 58.5, 52.1, 49.9, 53.5, 56.6,56.7, 46.5, 44.2, 42.7, 54.4, 55.3, 58.6, 48.2, 51.0)
+
+mc<-c(29.1, 28.2, 37.0, 31.1, 30.9, 23.7, 27.6, 30.6, 23.2, 24.8, 30.0,28.3, 23.0, 28.6, 21.3, 30.1, 25.7, 24.6, 27.1, 27.5)
+
+bf<-c(11.9, 22.8, 18.7, 20.1, 12.9, 21.7, 27.1, 25.4, 21.3,
+19.3, 25.4, 27.2, 11.7, 17.8, 12.8, 23.9, 22.6, 25.4, 14.8,
+21.1)
+
+```
+
+
+```{r}
+# Create new variables, for all interactions, including three two
+# by two interaction terms, as well as the single interaction term
+# with all three variables.
+
+st_tc <- st*tc
+st_mc <- st*mc
+tc_mc <- tc*mc
+st_tc_mc <- st*tc*mc
+
+# Create a data frame with all data:
+
+fat<-data.frame(st, tc, mc, st_tc, st_mc, tc_mc, st_tc_mc, bf)
+```
+
+
+```{r}
+# Look at the data
+fat
+```
+
+```{r}
+summary(fat)
+```
+```{r message=FALSE, warning=FALSE}
+# Look at scatter plots for each variables
+# Compute the correlation between the variables and the interactions
+GGally::ggpairs(fat)
+```
+
+- Looking at the scatter plots and correlation matrix, we see trouble. Many of the correlations between the independent variables are very high, which will cause severe confounding and/or near collinearity. 
+-The problem is particularly acute among the interaction variables we created.
+
+**Trick that sometimes helps:** Subtract the mean from each independent variable,and use these so-called “centered” variables to create the interaction variables.
+
+This will not change the correlations among the non-interaction terms, but may reduce correlations for interaction terms
+
+```{r}
+# create the centered independent variables
+st.c <- st - mean(st)
+tc.c <- tc - mean(tc)
+mc.c <- mc - mean(mc)
+# Now create the centered interaction terms:
+st_tc.c <- st.c*tc.c
+st_mc.c <- st.c*mc.c
+tc_mc.c <- tc.c*mc.c
+st_tc_mc.c <- st.c*tc.c*mc.c
+# Create a new data frame with this new set of independent variables
+fat.c <- data.frame(st.c, tc.c, mc.c, st_tc.c, st_mc.c, tc_mc.c, st_tc_mc.c, bf)
+
+head(fat.c)
+```
+
+```{r message=FALSE, warning=FALSE}
+# Looking at the new correlation matrix
+GGally::ggpairs(fat.c)
+```
+
+Still not perfect, but notice that the correlations have been drastically reduced for some of the interaction variables.
+Why does this work? Consider two variables that are highly correlated:
+
+```{r}
+X<-1:10
+X2<- X^2
+cor(X,X2) #[1] 0.9745586
+plot(X,X2)
+
+x.c <- X-mean(X)
+x2.c <- x.c^2
+cor(x.c, x2.c) #[1] 0
+plot(x.c, x2.c)
+
+
+```
+
+```{r}
+# Calculate a simple linear regression for each variable (not the interactions).
+regression1.out <- lm(bf ~ st.c)
+regression2.out <- lm(bf ~ tc.c)
+regression3.out <- lm(bf ~ mc.c)
+```
+
+
+
+```{r}
+summary(regression1.out)
+confint.lm(regression1.out,'st.c',level=0.95)
+
+print("Model2")
+summary(regression2.out)
+confint.lm(regression2.out,'tc.c',level=0.95)
+
+print("Model3")
+summary(regression3.out)
+confint.lm(regression3.out,'mc.c',level=0.95)
+```
+- Two of the three variables seem to have a strong effect,
+- but effect of mc.c is inconclusive (NOT NEGATIVE!!)
+
+```{r}
+# Calculate a multiple linear regression for all variables,
+# without interactions.
+regression4.out <- lm(bf ~ st.c + tc.c + mc.c)
+summary(regression4.out)
+confint.lm(regression4.out)
+```
+Compared to the univariate results, we see many changes, because of high confounding between st.c and tc.c. Since they provide such similar information, we will drop tc.c (somewhat arbitrary choice, in general, this choice can be made from substantive
+theory or preferences).
+
+
+```{r}
+regression5.out <- lm(bf ~ st.c + mc.c)
+summary(regression5.out)
+confint.lm(regression5.out)
+```
+- Much better result, note how much narrower CI’s are, both variables have at least a small effect, likely of clinical interest.
+
+```{r}
+# Add in the interaction between st.c and mc.c
+regression6.out <- lm(bf ~ st.c + mc.c + st_mc.c)
+
+summary(regression6.out)
+confint.lm(regression6.out)
+```
+### Draw overall conclusions based on the totality of evidence from all models.
+
+>
+There is no strong evidence of an interaction, but can we rule it out?Checking the descriptive statistics of the interaction term st_mc.c, we see that a 1 SD change means a change of
+
+```{r}
+sqrt(var(st_mc.c))
+#[1] 20.99732
+
+# Take the coefficient, multiply by this SD, we get:
+sqrt(var(st_mc.c)) * -0.02259
+#[1] -0.4743296
+
+# Similarly, for upper and lower CI limits:
+sqrt(var(st_mc.c)) * c(-0.0820029, 0.03682957)
+#[1] -1.7218415 0.7733224
+```
+All effects are very small, so it does look like we can strongly state that there is no interaction here. Had the CI been wider and included clinically interesting effects, it would have been inconclusive (this is extremely common when investigating
+interactions).
+
+
+
+
+
+```{r}
+#subset()
+subset(data,data$`Skinfold Thickness`>=20)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
